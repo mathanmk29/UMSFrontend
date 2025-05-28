@@ -33,7 +33,7 @@ const FacultyAttendancePage = () => {
   const [facultyName] = useState("Dr. Jane Smith");
   const [formData, setFormData] = useState({
     batch: "",
-    course:"",
+    course: "",
     department: "",
     semester: "",
     session: "FN",
@@ -51,7 +51,7 @@ const FacultyAttendancePage = () => {
   };
 
   const handleGenerateList = () => {
-    if (!formData.batch || !formData.course ||!formData.department || !formData.semester || !formData.session || !formData.date) {
+    if (!formData.batch || !formData.course || !formData.department || !formData.semester || !formData.session || !formData.date) {
       toast.error("Please fill all required fields");
       return;
     }
@@ -117,7 +117,30 @@ const FacultyAttendancePage = () => {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* 1. Batch */}
+
+
+              {/* 1. Course */}
+              <div className="space-y-2">
+                <Label htmlFor="course">
+                  Course <span className="text-red-500">*</span>
+                </Label>
+                <Select
+                  value={formData.course}
+                  onValueChange={(value) => handleSelectChange("course", value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a course" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {courses.map((course) => (
+                      <SelectItem key={course} value={course}>
+                        {course}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+                            {/* 2. Batch */}
               <div className="space-y-2">
                 <Label htmlFor="batch">
                   Batch <span className="text-red-500">*</span>
@@ -139,29 +162,7 @@ const FacultyAttendancePage = () => {
                 </Select>
               </div>
 
-              {/* 2. Course */}
-              <div className="space-y-2">
-                <Label htmlFor="course">
-                  Course <span className="text-red-500">*</span>
-                </Label>
-                <Select
-                  value={formData.course}
-                  onValueChange={(value) => handleSelectChange("course", value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a course" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {courses.map((course) => (
-                      <SelectItem key={course} value={course}>
-                        {course}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* 2. Department */}
+              {/* 3. Department */}
               <div className="space-y-2">
                 <Label htmlFor="department">
                   Department <span className="text-red-500">*</span>
@@ -183,7 +184,7 @@ const FacultyAttendancePage = () => {
                 </Select>
               </div>
 
-              {/* 3. Semester */}
+              {/* 4. Semester */}
               <div className="space-y-2">
                 <Label htmlFor="semester">
                   Semester <span className="text-red-500">*</span>
@@ -205,7 +206,7 @@ const FacultyAttendancePage = () => {
                 </Select>
               </div>
 
-              {/* 4. Session */}
+              {/* 5. Session */}
               <div className="space-y-2">
                 <Label htmlFor="session">
                   Session <span className="text-red-500">*</span>
@@ -224,7 +225,7 @@ const FacultyAttendancePage = () => {
                 </Select>
               </div>
 
-              {/* 5. Date */}
+              {/* 6. Date */}
               <div className="space-y-2">
                 <Label htmlFor="date">
                   Date <span className="text-red-500">*</span>
@@ -244,7 +245,7 @@ const FacultyAttendancePage = () => {
                 </div>
               </div>
 
-              {/* 6. Button */}
+              {/* 7. Button */}
               <div className="flex items-end">
                 <Button
                   onClick={handleGenerateList}
@@ -253,6 +254,13 @@ const FacultyAttendancePage = () => {
                   Generate Student List
                 </Button>
               </div>
+              {/*View previous attendance*/}
+              <Button
+              className="mb-1 bg-primary hover:bg-primary-dark w-full"
+                onClick={() => navigate("/faculty/attendance/view")}
+              >
+                View Previous Attendance
+              </Button>
             </div>
           </CardContent>
 

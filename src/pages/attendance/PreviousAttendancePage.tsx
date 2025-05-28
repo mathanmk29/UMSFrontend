@@ -6,18 +6,6 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 
-// Simple arrow icons (replace with your icon lib if needed)
-const LeftArrow = () => (
-  <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
-    <path stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-  </svg>
-);
-const RightArrow = () => (
-  <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
-    <path stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-  </svg>
-);
-
 interface AttendanceRecord {
   id: number;
   date: string;
@@ -120,14 +108,22 @@ function getMonthYearLabel(dateStr: string) {
 
 const PreviousAttendancePage = () => {
   const [facultyName] = useState("Dr. Jane Smith");
-  const [filters, setFilters] = useState({
+
+  // Separate filters for single and group modes
+  const [singleFilters, setSingleFilters] = useState({
+    singleDate: "",
+    department: "",
+    course: "",
+    batch: "",
+    semester: "",
+  });
+  const [groupFilters, setGroupFilters] = useState({
     fromDate: "",
     toDate: "",
     department: "",
     course: "",
     batch: "",
     semester: "",
-    session: "",
   });
 
   const [selectedRecord, setSelectedRecord] = useState<AttendanceRecord | null>(null);
@@ -137,14 +133,23 @@ const PreviousAttendancePage = () => {
   // Month/year selector state
   const [selectedMonthYear, setSelectedMonthYear] = useState<string | null>(null);
 
-  const navigate = useNavigate();
+  // Toggle state: "single" or "group"
+  const [attendanceMode, setAttendanceMode] = useState<"single" | "group">("single");
 
-  // Date filter helpers
-  const isDateRange = !!filters.fromDate && !!filters.toDate;
-  const isSingleDate = !!filters.fromDate && !filters.toDate;
+  // For single day view sheet toggles
+  const [showFN, setShowFN] = useState(false);
+  const [showAN, setShowAN] = useState(false);
+
+  const navigate = useNavigate();
 
   // Today's date string for max attribute
   const todayStr = new Date().toISOString().split("T")[0];
+
+  // Date filter helpers
+  const isDateRange = attendanceMode === "group" && !!groupFilters.fromDate && !!groupFilters.toDate;
+
+  // Use correct filters based on mode
+  const filters = attendanceMode === "single" ? singleFilters : groupFilters;
 
   // Filter records based on filters
   const filteredRecords = mockAttendanceRecords.filter((record) => {
@@ -155,16 +160,16 @@ const PreviousAttendancePage = () => {
       (!filters.semester || record.semester === filters.semester);
 
     // Date filtering
-    if (isDateRange) {
+    if (attendanceMode === "group" && groupFilters.fromDate && groupFilters.toDate) {
       return (
         matches &&
-        record.date >= filters.fromDate &&
-        record.date <= filters.toDate
+        record.date >= groupFilters.fromDate &&
+        record.date <= groupFilters.toDate
       );
-    } else if (isSingleDate) {
-      return matches && record.date === filters.fromDate && (!filters.session || record.session === filters.session);
+    } else if (attendanceMode === "single" && singleFilters.singleDate) {
+      return matches && record.date === singleFilters.singleDate;
     } else {
-      return matches && (!filters.session || record.session === filters.session);
+      return matches;
     }
   });
 
@@ -173,12 +178,12 @@ const PreviousAttendancePage = () => {
     if (!isDateRange) return null;
     const rangeRecords = mockAttendanceRecords.filter((record) => {
       const matches =
-        (!filters.department || record.department === filters.department) &&
-        (!filters.batch || record.batch === filters.batch) &&
-        (!filters.course || record.course === filters.course) &&
-        (!filters.semester || record.semester === filters.semester) &&
-        record.date >= filters.fromDate &&
-        record.date <= filters.toDate;
+        (!groupFilters.department || record.department === groupFilters.department) &&
+        (!groupFilters.batch || record.batch === groupFilters.batch) &&
+        (!groupFilters.course || record.course === groupFilters.course) &&
+        (!groupFilters.semester || record.semester === groupFilters.semester) &&
+        record.date >= groupFilters.fromDate &&
+        record.date <= groupFilters.toDate;
       return matches;
     });
 
@@ -237,8 +242,7 @@ const PreviousAttendancePage = () => {
     return students.filter((s) => !s.isPresent);
   };
 
-  const sessionDisabled = isDateRange;
-  const dateRangeArray = isDateRange ? getDateRangeArray(filters.fromDate, filters.toDate) : [];
+  const dateRangeArray = isDateRange ? getDateRangeArray(groupFilters.fromDate, groupFilters.toDate) : [];
   const monthYearOptions = useMemo(() => {
     // Get unique month-year pairs in the date range
     const set = new Set<string>();
@@ -256,13 +260,27 @@ const PreviousAttendancePage = () => {
       setSelectedMonthYear(null);
     }
     setSelectedDateInRange(null);
-  }, [filters.fromDate, filters.toDate, monthYearOptions.length]);
+  }, [groupFilters.fromDate, groupFilters.toDate, monthYearOptions.length, attendanceMode]);
+
+  // Reset FN/AN view toggles when date or mode changes
+  React.useEffect(() => {
+    setShowFN(false);
+    setShowAN(false);
+  }, [singleFilters.singleDate, attendanceMode]);
 
   // Filter days for selected month/year
   const daysForSelectedMonth = useMemo(() => {
     if (!selectedMonthYear) return [];
     return dateRangeArray.filter(date => getMonthYear(date) === selectedMonthYear);
   }, [dateRangeArray, selectedMonthYear]);
+
+  // Single day FN/AN records
+  const singleDayFN = attendanceMode === "single" && singleFilters.singleDate
+    ? filteredRecords.find(r => r.session === "FN")
+    : null;
+  const singleDayAN = attendanceMode === "single" && singleFilters.singleDate
+    ? filteredRecords.find(r => r.session === "AN")
+    : null;
 
   const recordsForSelectedDate =
     isDateRange && selectedDateInRange
@@ -282,35 +300,53 @@ const PreviousAttendancePage = () => {
           <p className="text-secondary mt-2 text-center">View Previous Attendance Sheets</p>
         </div>
 
+        {/* Toggle Button */}
+        <div className="flex justify-center mb-6">
+          <div className="flex items-center gap-2">
+            <Button
+              variant={attendanceMode === "single" ? "default" : "outline"}
+              onClick={() => {
+                setAttendanceMode("single");
+                setShowFN(false);
+                setShowAN(false);
+                setSelectedRecord(null);
+                setSelectedDateInRange(null);
+              }}
+            >
+              Single Day Attendance
+            </Button>
+            <Button
+              variant={attendanceMode === "group" ? "default" : "outline"}
+              onClick={() => {
+                setAttendanceMode("group");
+                setShowFN(false);
+                setShowAN(false);
+                setSelectedRecord(null);
+                setSelectedDateInRange(null);
+              }}
+            >
+              Overall Attendance
+            </Button>
+          </div>
+        </div>
+
         <Card className="mb-6">
           <CardHeader>
             <CardTitle>Attendance Records</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
-              <div className="space-y-2">
-                <Label htmlFor="batch">Batch</Label>
-                <Select
-                  value={filters.batch}
-                  onValueChange={(value) => setFilters((prev) => ({ ...prev, batch: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select batch" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {batches.map((batch) => (
-                      <SelectItem key={batch} value={batch}>
-                        {batch}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* Filter fields */}
+  
               <div className="space-y-2">
                 <Label htmlFor="course">Course</Label>
                 <Select
-                  value={filters.course}
-                  onValueChange={(value) => setFilters((prev) => ({ ...prev, course: value }))}
+                  value={attendanceMode === "single" ? singleFilters.course : groupFilters.course}
+                  onValueChange={(value) =>
+                    attendanceMode === "single"
+                      ? setSingleFilters((prev) => ({ ...prev, course: value }))
+                      : setGroupFilters((prev) => ({ ...prev, course: value }))
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select course" />
@@ -324,11 +360,39 @@ const PreviousAttendancePage = () => {
                   </SelectContent>
                 </Select>
               </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="batch">Batch</Label>
+                <Select
+                  value={attendanceMode === "single" ? singleFilters.batch : groupFilters.batch}
+                  onValueChange={(value) =>
+                    attendanceMode === "single"
+                      ? setSingleFilters((prev) => ({ ...prev, batch: value }))
+                      : setGroupFilters((prev) => ({ ...prev, batch: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select batch" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {batches.map((batch) => (
+                      <SelectItem key={batch} value={batch}>
+                        {batch}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="department">Department</Label>
                 <Select
-                  value={filters.department}
-                  onValueChange={(value) => setFilters((prev) => ({ ...prev, department: value }))}
+                  value={attendanceMode === "single" ? singleFilters.department : groupFilters.department}
+                  onValueChange={(value) =>
+                    attendanceMode === "single"
+                      ? setSingleFilters((prev) => ({ ...prev, department: value }))
+                      : setGroupFilters((prev) => ({ ...prev, department: value }))
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select department" />
@@ -345,8 +409,12 @@ const PreviousAttendancePage = () => {
               <div className="space-y-2">
                 <Label htmlFor="semester">Semester</Label>
                 <Select
-                  value={filters.semester}
-                  onValueChange={(value) => setFilters((prev) => ({ ...prev, semester: value }))}
+                  value={attendanceMode === "single" ? singleFilters.semester : groupFilters.semester}
+                  onValueChange={(value) =>
+                    attendanceMode === "single"
+                      ? setSingleFilters((prev) => ({ ...prev, semester: value }))
+                      : setGroupFilters((prev) => ({ ...prev, semester: value }))
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select semester" />
@@ -360,224 +428,341 @@ const PreviousAttendancePage = () => {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="fromDate">From Date</Label>
-                <input
-                  type="date"
-                  className="w-full px-3 py-2 border rounded-md border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                  value={filters.fromDate}
-                  max={todayStr}
-                  onChange={(e) => {
-                    setFilters((prev) => ({
-                      ...prev,
-                      fromDate: e.target.value,
-                      toDate: prev.toDate && prev.toDate < e.target.value ? "" : prev.toDate,
-                    }));
-                    setSelectedDateInRange(null);
-                    setSelectedRecord(null);
-                  }}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="toDate">To Date</Label>
-                <input
-                  type="date"
-                  className="w-full px-3 py-2 border rounded-md border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                  value={filters.toDate}
-                  min={filters.fromDate}
-                  max={todayStr}
-                  onChange={(e) => {
-                    setFilters((prev) => ({ ...prev, toDate: e.target.value }));
-                    setSelectedDateInRange(null);
-                    setSelectedRecord(null);
-                  }}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="session">Session</Label>
-                <div
-                  style={sessionDisabled ? { opacity: 0.5, pointerEvents: "none" } : {}}
-                >
-                  <Select
-                    value={filters.session}
-                    onValueChange={(value) => setFilters((prev) => ({ ...prev, session: value }))}
-                    disabled={sessionDisabled}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select session" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sessions.map((session) => (
-                        <SelectItem key={session} value={session}>
-                          {session}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              {/* Date pickers based on mode */}
+              {attendanceMode === "single" ? (
+                <div className="space-y-2 col-span-2 md:col-span-1">
+                  <Label htmlFor="singleDate">Date</Label>
+                  <input
+                    type="date"
+                    className="w-full px-3 py-2 border rounded-md border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    value={singleFilters.singleDate}
+                    max={todayStr}
+                    onChange={(e) => {
+                      setSingleFilters((prev) => ({
+                        ...prev,
+                        singleDate: e.target.value,
+                      }));
+                      setShowFN(false);
+                      setShowAN(false);
+                      setSelectedRecord(null);
+                    }}
+                  />
                 </div>
-              </div>
-            </div>
-            {/* Month/Year Selector and Day Buttons */}
-            {isDateRange && dateRangeArray.length > 0 && (
-              <>
-                <div className="w-full border-b border-gray-300 my-3" />
-                {/* Add label for the scroll bar purpose */}
-                                <Label className="block mb-2 text-sm text-muted-foreground">
-                  Select a date between "{filters.fromDate}" and "{filters.toDate}" to view attendance for a specific day.
-                </Label>
-                <div className="flex items-center gap-2 mb-4">
-                  <Label className="mr-2">Month:</Label>
-                  <Select
-                    value={selectedMonthYear ?? ""}
-                    onValueChange={v => setSelectedMonthYear(v)}
-                  >
-                    <SelectTrigger className="w-44">
-                      <SelectValue placeholder="Select month" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {monthYearOptions.map((my) => (
-                        <SelectItem key={my} value={my}>
-                          {getMonthYearLabel(my + "-01")}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {/* Days for selected month */}
-                  <div className="overflow-x-auto flex-1">
-                    <div className="flex flex-nowrap gap-2">
-                      {daysForSelectedMonth.map((date) => {
-                        const d = new Date(date);
-                        return (
-                          <Button
-                            key={date}
-                            variant={selectedDateInRange === date ? "default" : "outline"}
-                            onClick={() => {
-                              setSelectedDateInRange(date);
-                              setSelectedRecord(null);
-                            }}
-                            className="whitespace-nowrap"
-                            title={date}
-                          >
-                            {d.getDate()}
-                          </Button>
-                        );
-                      })}
-                    </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="fromDate">From Date</Label>
+                    <input
+                      type="date"
+                      className="w-full px-3 py-2 border rounded-md border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                      value={groupFilters.fromDate}
+                      max={todayStr}
+                      onChange={(e) => {
+                        setGroupFilters((prev) => ({
+                          ...prev,
+                          fromDate: e.target.value,
+                          toDate: prev.toDate && prev.toDate < e.target.value ? "" : prev.toDate,
+                        }));
+                        setSelectedDateInRange(null);
+                        setSelectedRecord(null);
+                      }}
+                    />
                   </div>
-                </div>
-              </>
-            )}
-
+                  <div className="space-y-2">
+                    <Label htmlFor="toDate">To Date</Label>
+                    <input
+                      type="date"
+                      className="w-full px-3 py-2 border rounded-md border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                      value={groupFilters.toDate}
+                      min={groupFilters.fromDate}
+                      max={todayStr}
+                      onChange={(e) => {
+                        setGroupFilters((prev) => ({ ...prev, toDate: e.target.value }));
+                        setSelectedDateInRange(null);
+                        setSelectedRecord(null);
+                      }}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
             <div className="mt-6">
-              {isDateRange ? (
-                dateRangeArray.length === 0 ? (
-                  <p className="text-secondary text-center">No dates in selected range.</p>
+              {/* Single Day Attendance */}
+              {attendanceMode === "single" ? (
+                !singleFilters.singleDate ? (
+                  <p className="text-secondary text-center">Please select a date to view attendance.</p>
                 ) : (
-                  <div>
-                    {/* Date buttons and scroll bar are now above */}
-                    {selectedDateInRange && (
-                      <div className="space-y-4 mb-4">
-                        {recordsForSelectedDate.length === 0 ? (
-                          <p className="text-secondary text-center">No records for this date.</p>
-                        ) : (
-                          recordsForSelectedDate.map((record) => (
-                            <Card
-                              key={record.id}
-                              className={`cursor-pointer border ${selectedRecord?.id === record.id ? "border-primary" : ""}`}
-                              onClick={() => setSelectedRecord(record)}
-                            >
-                              <CardContent className="flex flex-col md:flex-row md:justify-between md:items-center py-4">
-                                <div>
-                                  <div className="font-semibold">{record.department} - {record.batch}</div>
-                                  <div className="text-sm text-secondary">{record.course}  - Semester {record.semester}</div>
-                                  <div className="text-sm text-secondary">Date: {record.date} | Session: {record.session}</div>
-                                </div>
-                                <div className="mt-2 md:mt-0">
-                                  <Button variant="outline" size="sm">
-                                    View Sheet
-                                  </Button>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          ))
+                  <div className="space-y-4">
+                    {!singleDayFN && !singleDayAN ? (
+                      <p className="text-secondary text-center">No attendance records found for this date.</p>
+                    ) : (
+                      <>
+                        {/* FN View Sheet Card */}
+                        {singleDayFN && !showFN && (
+                          <Card>
+                            <CardContent className="flex flex-col md:flex-row md:justify-between md:items-center py-4">
+                              <div>
+                                <div className="font-semibold">{singleDayFN.department} - {singleDayFN.batch}</div>
+                                <div className="text-sm text-secondary">{singleDayFN.course} - Semester {singleDayFN.semester}</div>
+                                <div className="text-sm text-secondary">Date: {singleDayFN.date} [FN]</div>
+                              </div>
+                              <div className="mt-2 md:mt-0">
+                                <Button variant="outline" size="sm" onClick={() => { setShowFN(true); setShowAN(false); setSelectedRecord(null); }}>
+                                  View Sheet
+                                </Button>
+                              </div>
+                            </CardContent>
+                          </Card>
                         )}
-                      </div>
+                        {/* AN View Sheet Card */}
+                        {singleDayAN && !showAN && (
+                          <Card>
+                            <CardContent className="flex flex-col md:flex-row md:justify-between md:items-center py-4">
+                              <div>
+                                <div className="font-semibold">{singleDayAN.department} - {singleDayAN.batch}</div>
+                                <div className="text-sm text-secondary">{singleDayAN.course} - Semester {singleDayAN.semester}</div>
+                                <div className="text-sm text-secondary">Date: {singleDayAN.date} [AN]</div>
+                              </div>
+                              <div className="mt-2 md:mt-0">
+                                <Button variant="outline" size="sm" onClick={() => { setShowAN(true); setShowFN(false); setSelectedRecord(null); }}>
+                                  View Sheet
+                                </Button>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )}
+                        {/* FN Attendance Sheet */}
+                        {singleDayFN && showFN && (
+                          <Card>
+                            <CardHeader>
+                              <CardTitle>
+                                <div>Attendance Sheet - {singleDayFN.department} ({singleDayFN.batch})</div>
+                                <div>{singleDayFN.course} - Semester {singleDayFN.semester}</div>
+                                <div>Date: {singleDayFN.date} [FN]</div>
+                              </CardTitle>
+                              <CardDescription>
+                                <span className="font-semibold">Total Students:</span> {singleDayFN.students.length}
+                              </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                              <Button variant="outline" className="mb-4" onClick={() => setShowFN(false)}>
+                                ← Back to View Sheet
+                              </Button>
+                              <div className="mb-4 flex gap-2 items-center">
+                                <Label>Status Filter:</Label>
+                                <Select value={statusFilter} onValueChange={v => setStatusFilter(v as any)}>
+                                  <SelectTrigger className="w-32">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="all">All</SelectItem>
+                                    <SelectItem value="present">Present</SelectItem>
+                                    <SelectItem value="absent">Absent</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div>
+                                <table className="min-w-full border rounded">
+                                  <thead>
+                                    <tr className="bg-gray-100">
+                                      <th className="py-2 px-4 border-b text-left">Roll Number</th>
+                                      <th className="py-2 px-4 border-b text-left">Name</th>
+                                      <th className="py-2 px-4 border-b text-left">Status</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {getFilteredStudents(singleDayFN.students).map((student) => (
+                                      <tr key={student.id}>
+                                        <td className="py-2 px-4 border-b">{student.rollNumber}</td>
+                                        <td className="py-2 px-4 border-b">{student.name}</td>
+                                        <td className="py-2 px-4 border-b">
+                                          {student.isPresent ? (
+                                            <span className="text-green-600 flex items-center gap-1">
+                                              <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
+                                                <path stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                              </svg>
+                                              Present
+                                            </span>
+                                          ) : (
+                                            <span className="text-red-600 flex items-center gap-1">
+                                              <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
+                                                <path stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                              </svg>
+                                              Absent
+                                            </span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                                {getFilteredStudents(singleDayFN.students).length === 0 && (
+                                  <div className="text-center text-secondary py-4">No students found for this filter.</div>
+                                )}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )}
+                        {/* AN Attendance Sheet */}
+                        {singleDayAN && showAN && (
+                          <Card>
+                            <CardHeader>
+                              <CardTitle>
+                                <div>Attendance Sheet - {singleDayAN.department} ({singleDayAN.batch})</div>
+                                <div>{singleDayAN.course} - Semester {singleDayAN.semester}</div>
+                                <div>Date: {singleDayAN.date} [AN]</div>
+                              </CardTitle>
+                              <CardDescription>
+                                <span className="font-semibold">Total Students:</span> {singleDayAN.students.length}
+                              </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                              <Button variant="outline" className="mb-4" onClick={() => setShowAN(false)}>
+                                ← Back to View Sheet
+                              </Button>
+                              <div className="mb-4 flex gap-2 items-center">
+                                <Label>Status Filter:</Label>
+                                <Select value={statusFilter} onValueChange={v => setStatusFilter(v as any)}>
+                                  <SelectTrigger className="w-32">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="all">All</SelectItem>
+                                    <SelectItem value="present">Present</SelectItem>
+                                    <SelectItem value="absent">Absent</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div>
+                                <table className="min-w-full border rounded">
+                                  <thead>
+                                    <tr className="bg-gray-100">
+                                      <th className="py-2 px-4 border-b text-left">Roll Number</th>
+                                      <th className="py-2 px-4 border-b text-left">Name</th>
+                                      <th className="py-2 px-4 border-b text-left">Status</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {getFilteredStudents(singleDayAN.students).map((student) => (
+                                      <tr key={student.id}>
+                                        <td className="py-2 px-4 border-b">{student.rollNumber}</td>
+                                        <td className="py-2 px-4 border-b">{student.name}</td>
+                                        <td className="py-2 px-4 border-b">
+                                          {student.isPresent ? (
+                                            <span className="text-green-600 flex items-center gap-1">
+                                              <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
+                                                <path stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                              </svg>
+                                              Present
+                                            </span>
+                                          ) : (
+                                            <span className="text-red-600 flex items-center gap-1">
+                                              <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
+                                                <path stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                              </svg>
+                                              Absent
+                                            </span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                                {getFilteredStudents(singleDayAN.students).length === 0 && (
+                                  <div className="text-center text-secondary py-4">No students found for this filter.</div>
+                                )}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )}
+                      </>
                     )}
                   </div>
                 )
               ) : (
-                filteredRecords.length === 0 ? (
-                  <p className="text-secondary text-center">No records found for the selected filters.</p>
+                // Group Attendance
+                isDateRange ? (
+                  dateRangeArray.length === 0 ? (
+                    <p className="text-secondary text-center">No dates in selected range.</p>
+                  ) : (
+                    <div>
+                      {selectedDateInRange && (
+                        <div className="space-y-4 mb-4">
+                          {recordsForSelectedDate.length === 0 ? (
+                            <p className="text-secondary text-center">No records for this date.</p>
+                          ) : (
+                            recordsForSelectedDate.map((record) => (
+                              <Card
+                                key={record.id}
+                                className={`cursor-pointer border ${selectedRecord?.id === record.id ? "border-primary" : ""}`}
+                                onClick={() => setSelectedRecord(record)}
+                              >
+                                <CardContent className="flex flex-col md:flex-row md:justify-between md:items-center py-4">
+                                  <div>
+                                    <div className="font-semibold">{record.department} - {record.batch}</div>
+                                    <div className="text-sm text-secondary">{record.course}  - Semester {record.semester}</div>
+                                    <div className="text-sm text-secondary">Date: {record.date}</div>
+                                  </div>
+                                  <div className="mt-2 md:mt-0">
+                                    <Button variant="outline" size="sm">
+                                      View Sheet
+                                    </Button>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
                 ) : (
-                  <div className="space-y-4">
-                    {filteredRecords.slice(0, 4).map((record) => (
-                      <Card
-                        key={record.id}
-                        className={`cursor-pointer border ${selectedRecord?.id === record.id ? "border-primary" : ""}`}
-                        onClick={() => setSelectedRecord(record)}
-                      >
-                        <CardContent className="flex flex-col md:flex-row md:justify-between md:items-center py-4">
-                          <div>
-                            <div className="font-semibold">{record.department} - {record.batch}</div>
-                            <div className="text-sm text-secondary">{record.course}  - Semester {record.semester}</div>
-                            <div className="text-sm text-secondary">Date: {record.date} | Session: {record.session}</div>
-                          </div>
-                          <div className="mt-2 md:mt-0">
-                            <Button variant="outline" size="sm">
-                              View Sheet
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
+                  <p className="text-secondary text-center">No records found for the selected filters.</p>
                 )
               )}
             </div>
           </CardContent>
         </Card>
 
-        {/* Date Range Attendance Sheet */}
-        {isDateRange && !selectedRecord && (
+        {/* Group Attendance Sheet */}
+        {attendanceMode === "group" && isDateRange && !selectedRecord && (
           <Card>
             <CardHeader>
               <CardTitle>
-                Attendance Sheet (Date Range: {filters.fromDate} to {filters.toDate})
+                Attendance Sheet (Date Range: {groupFilters.fromDate} to {groupFilters.toDate})
               </CardTitle>
               <CardDescription>
-                <span className="font-semibold">Combined attendance for all sessions and days in range</span>
+                <span className="font-semibold">Combined attendance for all sessions in given range</span>
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
-                <table className="min-w-full border rounded">
-                  <thead>
-                    <tr className="bg-gray-100">
-                      <th className="py-2 px-4 border-b text-left">Roll Number</th>
-                      <th className="py-2 px-4 border-b text-left">Name</th>
-                      <th className="py-2 px-4 border-b text-left">Days</th>
-                      <th className="py-2 px-4 border-b text-left">FN Present / Total</th>
-                      <th className="py-2 px-4 border-b text-left">AN Present / Total</th>
-                      <th className="py-2 px-4 border-b text-left">Attendance %</th>
+              <table className="min-w-full border rounded">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="py-2 px-4 border-b text-left">Roll Number</th>
+                    <th className="py-2 px-4 border-b text-left">Name</th>
+                    <th className="py-2 px-4 border-b text-left">Days</th>
+                    <th className="py-2 px-4 border-b text-left">FN     Present / Total</th>
+                    <th className="py-2 px-4 border-b text-left">AN Present / Total</th>
+                    <th className="py-2 px-4 border-b text-left">Attendance %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {getDateRangeSummary()?.map((student) => (
+                    <tr key={student.rollNumber}>
+                      <td className="py-2 px-4 border-b">{student.rollNumber}</td>
+                      <td className="py-2 px-4 border-b">{student.name}</td>
+                      <td className="py-2 px-4 border-b">{student.totalDays}</td>
+                      <td className="py-2 px-4 border-b">{student.fnPresent} / {student.fnTotal}</td>
+                      <td className="py-2 px-4 border-b">{student.anPresent} / {student.anTotal}</td>
+                      <td className="py-2 px-4 border-b">{student.attendancePercent}%</td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {getDateRangeSummary()?.map((student) => (
-                      <tr key={student.rollNumber}>
-                        <td className="py-2 px-4 border-b">{student.rollNumber}</td>
-                        <td className="py-2 px-4 border-b">{student.name}</td>
-                        <td className="py-2 px-4 border-b">{student.totalDays}</td>
-                        <td className="py-2 px-4 border-b">{student.fnPresent} / {student.fnTotal}</td>
-                        <td className="py-2 px-4 border-b">{student.anPresent} / {student.anTotal}</td>
-                        <td className="py-2 px-4 border-b">{student.attendancePercent}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {getDateRangeSummary()?.length === 0 && (
-                  <div className="text-center text-secondary py-4">No students found for this filter.</div>
-                )}
-              </div>
+                  ))}
+                </tbody>
+              </table>
+              {getDateRangeSummary()?.length === 0 && (
+                <div className="text-center text-secondary py-4">No students found for this filter.</div>
+              )}
             </CardContent>
           </Card>
         )}
@@ -613,7 +798,7 @@ const PreviousAttendancePage = () => {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="overflow-x-auto">
+              <div>
                 <table className="min-w-full border rounded">
                   <thead>
                     <tr className="bg-gray-100">
