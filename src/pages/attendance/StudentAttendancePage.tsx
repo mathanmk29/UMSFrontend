@@ -53,7 +53,7 @@ const StudentAttendancePage = () => {
     setError("");
     
     try {
-      const response = await axios.get<AttendanceData[]>(`http://localhost:8080/api/getstudent?id=${studentId}`);
+      const response = await axios.get<AttendanceData[]>(`/api/getstudent?id=${studentId}`);
       setAttendanceData(response.data);
       
       // Set student name from the first record if available
@@ -64,6 +64,14 @@ const StudentAttendancePage = () => {
       // Filter data for the selected semester
       const semNumber = parseInt(semester.split(" ")[1]);
       const semesterData = response.data.filter(item => item.sem === semNumber);
+      
+      // Check if data exists for this semester
+      if (semesterData.length === 0) {
+        setError(`No attendance data found for ${semester}`);
+        setFnSessionData({ conducted: 0, attended: 0, percentage: 0 });
+        setAnSessionData({ conducted: 0, attended: 0, percentage: 0 });
+        return;
+      }
       
       // Process FN (forenoon) session data
       const fnData = semesterData.find(item => item.session.toLowerCase() === "forenoon");
@@ -160,7 +168,6 @@ const StudentAttendancePage = () => {
             </Select>
           </div>
           {loading && <p className="mt-2">Loading attendance data...</p>}
-          {error && <p className="mt-2 text-red-500">{error}</p>}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -169,11 +176,15 @@ const StudentAttendancePage = () => {
               <div className="flex flex-col md:flex-row md:justify-between items-center">
                 <div className="flex items-center mb-4 md:mb-0">
                   <div className="h-20 w-20 rounded-full border-4 border-primary flex items-center justify-center mr-4">
-                    <span className="text-2xl font-bold">{dynamicOverallPercentage}%</span>
+                    <span className="text-2xl font-bold">
+                      {!selectedSemester || error ? "--" : `${dynamicOverallPercentage}%`}
+                    </span>
                   </div>
                   <div>
                     <h3 className="font-medium text-lg">Overall Attendance</h3>
-                    <p className={`text-sm ${attendanceStatus.color}`}>{attendanceStatus.text}</p>
+                    <p className={`text-sm ${!selectedSemester || error ? "text-gray-500" : attendanceStatus.color}`}>
+                      {!selectedSemester || error ? "--" : attendanceStatus.text}
+                    </p>
                   </div>
                 </div>
 
@@ -186,14 +197,16 @@ const StudentAttendancePage = () => {
 
                   <div className="text-center">
                     <p className="text-xs text-secondary">Current</p>
-                    <p className="text-2xl font-bold">{loading ? "Loading..." : `${dynamicOverallPercentage}%`}</p>
+                    <p className="text-2xl font-bold">
+                      {loading ? "Loading..." : !selectedSemester || error ? "--" : `${dynamicOverallPercentage}%`}
+                    </p>
                     <p className="text-xs text-secondary">Attendance</p>
                   </div>
 
                   <div className="text-center">
                     <p className="text-xs text-secondary">Risk Status</p>
-                    <p className={`text-2xl font-bold ${dynamicOverallPercentage >= 75 ? "text-green-500" : "text-red-500"}`}>
-                      {loading ? "Loading..." : dynamicOverallPercentage >= 75 ? "Safe" : "At Risk"}
+                    <p className={`text-2xl font-bold ${!selectedSemester || error ? "text-gray-500" : dynamicOverallPercentage >= 75 ? "text-green-500" : "text-red-500"}`}>
+                      {loading ? "Loading..." : !selectedSemester || error ? "--" : dynamicOverallPercentage >= 75 ? "Safe" : "At Risk"}
                     </p>
                     <p className="text-xs text-secondary">Status</p>
                   </div>
@@ -216,9 +229,11 @@ const StudentAttendancePage = () => {
             <CardContent>
               {loading ? (
                 <p>Loading session data...</p>
+              ) : !selectedSemester ? (
+                <p className="text-sm text-muted-foreground">Please select a semester to view session data.</p>
               ) : error ? (
                 <p className="text-red-500">{error}</p>
-              ) : selectedSemester ? (
+              ) : (
                 <div className="space-y-4">
                   <div className="border rounded-md p-4 bg-muted/30">
                     <h4 className="font-semibold mb-1">FN Session (Forenoon)</h4>
@@ -256,8 +271,6 @@ const StudentAttendancePage = () => {
                     </p>
                   </div>
                 </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">Please select a semester to view session data.</p>
               )}
             </CardContent>
           </Card>
