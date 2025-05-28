@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Navbar from "@/components/layout/Navbar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -10,36 +10,106 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { BarChart4 } from "lucide-react";
+import axios from "axios";
+
+// Define interface for the API response data
+interface AttendanceData {
+  session: string;
+  stdId: string;
+  deptName: string;
+  sem: number;
+  stdName: string;
+  batch: string;
+  deptId: string;
+  totaldays: number;
+  presentcount: number;
+  percentage: number;
+}
 
 const StudentAttendancePage = () => {
-  const [studentName] = useState("John Doe");
+  // State variables
+  const [studentId] = useState("l302"); // Hardcoded for now, can be made dynamic later
+  const [studentName, setStudentName] = useState("");
   const [selectedSemester, setSelectedSemester] = useState("");
+  const [attendanceData, setAttendanceData] = useState<AttendanceData[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  
+  // Session data for the selected semester
+  const [fnSessionData, setFnSessionData] = useState({ conducted: 0, attended: 0, percentage: 0 });
+  const [anSessionData, setAnSessionData] = useState({ conducted: 0, attended: 0, percentage: 0 });
 
-  // Simulated session data per semester
-  const sessionAttendanceBySemester = {
-    "Semester 1": { FN: { conducted: 40, attended: 32 }, AN: { conducted: 30, attended: 22 } },
-    "Semester 2": { FN: { conducted: 42, attended: 36 }, AN: { conducted: 28, attended: 25 } },
-    "Semester 3": { FN: { conducted: 35, attended: 30 }, AN: { conducted: 20, attended: 15 } },
-    "Semester 4": { FN: { conducted: 0, attended: 0 }, AN: { conducted: 0, attended: 0 } },
-    "Semester 5": { FN: { conducted: 0, attended: 0 }, AN: { conducted: 0, attended: 0 } },
-    "Semester 6": { FN: { conducted: 0, attended: 0 }, AN: { conducted: 0, attended: 0 } },
-    "Semester 7": { FN: { conducted: 0, attended: 0 }, AN: { conducted: 0, attended: 0 } },
-    "Semester 8": { FN: { conducted: 0, attended: 0 }, AN: { conducted: 0, attended: 0 } },
+  // Function to handle semester selection
+  const handleSemesterChange = (value: string) => {
+    setSelectedSemester(value);
+    fetchAttendanceData(value);
   };
 
+  // Function to fetch attendance data from API
+  const fetchAttendanceData = async (semester: string) => {
+    if (!semester) return;
+    
+    setLoading(true);
+    setError("");
+    
+    try {
+      const response = await axios.get<AttendanceData[]>(`http://localhost:8080/api/getstudent?id=${studentId}`);
+      setAttendanceData(response.data);
+      
+      // Set student name from the first record if available
+      if (response.data.length > 0) {
+        setStudentName(response.data[0].stdName);
+      }
+      
+      // Filter data for the selected semester
+      const semNumber = parseInt(semester.split(" ")[1]);
+      const semesterData = response.data.filter(item => item.sem === semNumber);
+      
+      // Process FN (forenoon) session data
+      const fnData = semesterData.find(item => item.session.toLowerCase() === "forenoon");
+      if (fnData) {
+        setFnSessionData({
+          conducted: fnData.totaldays,
+          attended: fnData.presentcount,
+          percentage: fnData.percentage
+        });
+      } else {
+        setFnSessionData({ conducted: 0, attended: 0, percentage: 0 });
+      }
+      
+      // Process AN (afternoon) session data
+      const anData = semesterData.find(item => item.session.toLowerCase() === "afternoon");
+      if (anData) {
+        setAnSessionData({
+          conducted: anData.totaldays,
+          attended: anData.presentcount,
+          percentage: anData.percentage
+        });
+      } else {
+        setAnSessionData({ conducted: 0, attended: 0, percentage: 0 });
+      }
+      
+    } catch (err) {
+      console.error("Error fetching attendance data:", err);
+      setError("Failed to fetch attendance data. Please try again later.");
+      setFnSessionData({ conducted: 0, attended: 0, percentage: 0 });
+      setAnSessionData({ conducted: 0, attended: 0, percentage: 0 });
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Calculate overall percentage
   const getOverallPercentage = () => {
-    const sessionData = sessionAttendanceBySemester[selectedSemester];
-    if (!sessionData) return null;
 
-    const totalConducted = sessionData.FN.conducted + sessionData.AN.conducted;
-    const totalAttended = sessionData.FN.attended + sessionData.AN.attended;
-
-    if (totalConducted === 0) return 0;
-
-    return Math.round((totalAttended / totalConducted) * 100); // Rounded to integer
+    if (fnSessionData.conducted === 0 && anSessionData.conducted === 0) return 0;
+    if (fnSessionData.conducted === 0) return Math.round(anSessionData.percentage);
+    if (anSessionData.conducted === 0) return Math.round(fnSessionData.percentage);
+    
+    return Math.round((fnSessionData.percentage + anSessionData.percentage) / 2);
   };
-
-  const dynamicOverallPercentage = selectedSemester ? getOverallPercentage() ?? 0 : 0;
+  
+  const dynamicOverallPercentage = getOverallPercentage();
 
   const getAttendanceStatus = (percentage: number) => {
     if (percentage >= 90) return { text: "Excellent", color: "text-green-600" };
@@ -63,7 +133,7 @@ const StudentAttendancePage = () => {
 
   return (
     <>
-      <Navbar userType="student" userName={studentName} />
+      <Navbar userType="student" userName={studentName || "Student"} />
       <div className="page-container max-w-5xl mx-auto">
         <div className="mb-6">
           <h1 className="text-3xl font-bold">Attendance Dashboard</h1>
@@ -76,7 +146,7 @@ const StudentAttendancePage = () => {
             <br />
           </div>
           <div className="max-w-xs">
-            <Select value={selectedSemester} onValueChange={setSelectedSemester}>
+            <Select value={selectedSemester} onValueChange={handleSemesterChange}>
               <SelectTrigger>
                 <SelectValue placeholder="Select semester" />
               </SelectTrigger>
@@ -89,6 +159,8 @@ const StudentAttendancePage = () => {
               </SelectContent>
             </Select>
           </div>
+          {loading && <p className="mt-2">Loading attendance data...</p>}
+          {error && <p className="mt-2 text-red-500">{error}</p>}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -114,14 +186,14 @@ const StudentAttendancePage = () => {
 
                   <div className="text-center">
                     <p className="text-xs text-secondary">Current</p>
-                    <p className="text-2xl font-bold">{dynamicOverallPercentage}%</p>
+                    <p className="text-2xl font-bold">{loading ? "Loading..." : `${dynamicOverallPercentage}%`}</p>
                     <p className="text-xs text-secondary">Attendance</p>
                   </div>
 
                   <div className="text-center">
                     <p className="text-xs text-secondary">Risk Status</p>
                     <p className={`text-2xl font-bold ${dynamicOverallPercentage >= 75 ? "text-green-500" : "text-red-500"}`}>
-                      {dynamicOverallPercentage >= 75 ? "Safe" : "At Risk"}
+                      {loading ? "Loading..." : dynamicOverallPercentage >= 75 ? "Safe" : "At Risk"}
                     </p>
                     <p className="text-xs text-secondary">Status</p>
                   </div>
@@ -142,50 +214,44 @@ const StudentAttendancePage = () => {
               <CardDescription>Breakdown by FN & AN session</CardDescription>
             </CardHeader>
             <CardContent>
-              {selectedSemester ? (
+              {loading ? (
+                <p>Loading session data...</p>
+              ) : error ? (
+                <p className="text-red-500">{error}</p>
+              ) : selectedSemester ? (
                 <div className="space-y-4">
                   <div className="border rounded-md p-4 bg-muted/30">
-                    <h4 className="font-semibold mb-1">FN Session</h4>
+                    <h4 className="font-semibold mb-1">FN Session (Forenoon)</h4>
                     <p>
                       Total FN Sessions Conducted:{" "}
-                      <strong>{sessionAttendanceBySemester[selectedSemester].FN.conducted}</strong>
+                      <strong>{fnSessionData.conducted}</strong>
                     </p>
                     <p>
                       Total FN Sessions Attended:{" "}
-                      <strong>{sessionAttendanceBySemester[selectedSemester].FN.attended}</strong>
+                      <strong>{fnSessionData.attended}</strong>
                     </p>
                     <p>
                       Attendance %:{" "}
                       <strong className="text-green-600">
-                        {(
-                          (sessionAttendanceBySemester[selectedSemester].FN.attended /
-                            sessionAttendanceBySemester[selectedSemester].FN.conducted) *
-                          100 || 0
-                        ).toFixed(2)}
-                        %
+                        {fnSessionData.percentage.toFixed(2)}%
                       </strong>
                     </p>
                   </div>
 
                   <div className="border rounded-md p-4 bg-muted/30">
-                    <h4 className="font-semibold mb-1">AN Session</h4>
+                    <h4 className="font-semibold mb-1">AN Session (Afternoon)</h4>
                     <p>
                       Total AN Sessions Conducted:{" "}
-                      <strong>{sessionAttendanceBySemester[selectedSemester].AN.conducted}</strong>
+                      <strong>{anSessionData.conducted}</strong>
                     </p>
                     <p>
                       Total AN Sessions Attended:{" "}
-                      <strong>{sessionAttendanceBySemester[selectedSemester].AN.attended}</strong>
+                      <strong>{anSessionData.attended}</strong>
                     </p>
                     <p>
                       Attendance %:{" "}
                       <strong className="text-yellow-600">
-                        {(
-                          (sessionAttendanceBySemester[selectedSemester].AN.attended /
-                            sessionAttendanceBySemester[selectedSemester].AN.conducted) *
-                          100 || 0
-                        ).toFixed(2)}
-                        %
+                        {anSessionData.percentage.toFixed(2)}%
                       </strong>
                     </p>
                   </div>
